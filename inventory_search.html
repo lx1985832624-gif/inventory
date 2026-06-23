@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>力源库存查询系统</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif; background: #f0f2f5; color: #333; }
+.header { background: linear-gradient(135deg, #1a3a5c 0%, #2a5f8f 100%); color: white; padding: 24px 0; text-align: center; }
+.header h1 { font-size: 26px; font-weight: 600; letter-spacing: 2px; }
+.header p { font-size: 13px; opacity: 0.8; margin-top: 6px; }
+.update-time { font-size: 12px; opacity: 0.7; margin-top: 4px; }
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.upload-box { background: white; border-radius: 10px; padding: 30px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; }
+.upload-box.done { background: #f0faf0; }
+.upload-btn { display: inline-block; padding: 12px 32px; background: #1a3a5c; color: white; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; transition: 0.2s; }
+.upload-btn:hover { background: #2a5f8f; }
+.upload-btn:disabled { background: #95a5a6; cursor: not-allowed; }
+.file-info { margin-top: 10px; font-size: 13px; color: #666; }
+.status-badge { display: inline-block; padding: 4px 14px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-top: 10px; }
+.status-loading { background: #fff3cd; color: #856404; }
+.status-ok { background: #d4edda; color: #155724; }
+.hidden { display: none; }
+.search-section { background: white; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; }
+.search-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.search-input { flex: 1; min-width: 200px; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 15px; outline: none; transition: 0.2s; }
+.search-input:focus { border-color: #1a3a5c; }
+.search-btn { padding: 12px 28px; background: #1a3a5c; color: white; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; transition: 0.2s; }
+.search-btn:hover { background: #2a5f8f; }
+.search-btn:disabled { background: #95a5a6; cursor: not-allowed; }
+.example-tags { margin-top: 10px; font-size: 13px; color: #888; }
+.example-tags span { display: inline-block; padding: 2px 10px; margin: 2px 4px; background: #eef3f8; border-radius: 4px; cursor: pointer; transition: 0.2s; font-family: Consolas, monospace; font-size: 12px; }
+.example-tags span:hover { background: #d6e4f0; color: #1a3a5c; }
+.result-count { font-size: 14px; color: #666; margin-bottom: 12px; }
+.result-table-wrap { overflow-x: auto; }
+.result-table { width: 100%; border-collapse: collapse; font-size: 13px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.result-table th { background: #1a3a5c; color: white; padding: 10px 8px; text-align: left; white-space: nowrap; font-weight: 500; }
+.result-table td { padding: 8px; border-bottom: 1px solid #eee; white-space: nowrap; }
+.result-table tr:hover td { background: #f5f8fb; }
+.result-table .qty { font-weight: 600; color: #1a3a5c; }
+.result-table .qty-zero { color: #999; }
+.qty-high { color: #27ae60; font-weight: 600; }
+.qty-low { color: #e67e22; font-weight: 600; }
+.qty-none { color: #e74c3c; }
+.summary-bar { background: white; border-radius: 10px; padding: 16px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.summary-bar .total { font-size: 14px; color: #555; }
+.summary-bar .total b { color: #1a3a5c; }
+.download-btn { padding: 8px 20px; background: #27ae60; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; transition: 0.2s; }
+.download-btn:hover { background: #219a52; }
+.footer { text-align: center; padding: 20px; color: #999; font-size: 12px; }
+.no-result { text-align: center; padding: 40px; color: #999; }
+.no-result .icon { font-size: 48px; margin-bottom: 10px; }
+.hint-section { background: white; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; }
+.hint-section h3 { font-size: 15px; color: #1a3a5c; margin-bottom: 8px; }
+.hint-section ul { padding-left: 20px; font-size: 13px; color: #555; line-height: 1.8; }
+@media (max-width: 768px) {
+  .search-row { flex-direction: column; }
+  .search-input { width: 100%; }
+  .search-btn { width: 100%; }
+  .result-table { font-size: 12px; }
+  .result-table th, .result-table td { padding: 6px 4px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>力源信息 · 库存查询系统</h1>
+  <p>Wuhan P&amp;S Information Technology Co., Ltd.</p>
+  <div class="update-time" id="updateTimeDisplay">库存数据：未加载</div>
+</div>
+
+<div class="container">
+
+  <!-- Upload Section -->
+  <div class="upload-box" id="uploadBox">
+    <div style="margin-bottom: 12px; font-size: 14px; color: #555;">
+      每天更新库存，上传 Excel 文件后客户即可自助查询
+    </div>
+    <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+      📤 上传库存Excel文件
+    </button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFileUpload(event)">
+    <div class="file-info" id="fileInfo">支持 .xlsx / .xls 格式</div>
+    <div id="statusBadge"></div>
+  </div>
+
+  <!-- Summary Bar -->
+  <div class="summary-bar hidden" id="summaryBar">
+    <div class="total">
+      总库存料号：<b id="totalParts">0</b> 条 &nbsp;|&nbsp;
+      查询结果：<b id="resultCount">0</b> 条
+    </div>
+    <div>
+      <button class="download-btn" onclick="downloadExcel()">⬇ 下载库存Excel</button>
+    </div>
+  </div>
+
+  <!-- Search Section -->
+  <div class="search-section hidden" id="searchSection">
+    <div class="search-row">
+      <input class="search-input" id="searchInput" type="text" placeholder="输入物料号(MPN)搜索，如 MOC3083SR2M" onkeydown="if(event.key==='Enter') searchInventory()">
+      <button class="search-btn" id="searchBtn" onclick="searchInventory()">🔍 搜索</button>
+    </div>
+    <div class="example-tags">
+      示例：<span onclick="searchExample('MOC3083SR2M')">MOC3083SR2M</span>
+      <span onclick="searchExample('4N35SR2M')">4N35SR2M</span>
+      <span onclick="searchExample('AiP7612GB235')">AiP7612GB235</span>
+      <span onclick="searchExample('STM32H750')">STM32H750</span>
+      <span onclick="searchExample('NSI45015')">NSI45015</span>
+      <span onclick="searchExample('BAS21DW5T1G')">BAS21DW5T1G</span>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="resultsArea"></div>
+
+  <!-- Help -->
+  <div class="hint-section" id="hintArea">
+    <h3>💡 使用说明</h3>
+    <ul>
+      <li>上传库存 Excel 文件后，客户可在搜索框输入物料号查询</li>
+      <li>支持模糊搜索，输入部分型号即可匹配</li>
+      <li>搜索结果按库存数量从高到低排序</li>
+      <li>绿色数字 = 库存充足，橙色 = 库存偏低，红色 = 无库存</li>
+      <li>可随时下载当前查询的库存 Excel 文件</li>
+    </ul>
+  </div>
+
+</div>
+
+<div class="footer">
+  武汉力源信息技术股份有限公司 | 库存数据每日更新
+</div>
+
+<script>
+let inventoryData = [];
+let allHeaders = [];
+let fileName = '';
+let fileUploadTime = '';
+
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  fileName = file.name;
+  fileUploadTime = new Date().toLocaleString('zh-CN', { hour12: false });
+
+  const badge = document.getElementById('statusBadge');
+  const fileInfo = document.getElementById('fileInfo');
+  const uploadBox = document.getElementById('uploadBox');
+
+  badge.innerHTML = '<span class="status-badge status-loading">⏳ 正在加载数据...</span>';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+      inventoryData = jsonData;
+      allHeaders = Object.keys(jsonData[0] || {});
+
+      // Update display
+      document.getElementById('totalParts').textContent = inventoryData.length.toLocaleString();
+      document.getElementById('updateTimeDisplay').textContent = '库存数据：已更新 ' + fileUploadTime;
+
+      badge.innerHTML = '<span class="status-badge status-ok">✅ 加载完成，共 ' + inventoryData.length.toLocaleString() + ' 条库存</span>';
+      fileInfo.textContent = '已加载：' + fileName + ' | 共 ' + inventoryData.length.toLocaleString() + ' 条记录';
+
+      uploadBox.classList.add('done');
+      document.getElementById('searchSection').classList.remove('hidden');
+      document.getElementById('summaryBar').classList.remove('hidden');
+      document.getElementById('hintArea').classList.add('hidden');
+
+      document.getElementById('searchInput').focus();
+
+    } catch(err) {
+      badge.innerHTML = '<span class="status-badge" style="background:#f8d7da;color:#721c24;">❌ 加载失败：' + err.message + '</span>';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function searchInventory() {
+  const query = document.getElementById('searchInput').value.trim();
+  if (!query) {
+    showResult('<div class="no-result"><div class="icon">🔍</div>请输入物料号</div>');
+    return;
+  }
+
+  if (inventoryData.length === 0) {
+    showResult('<div class="no-result"><div class="icon">📂</div>请先上传库存文件</div>');
+    return;
+  }
+
+  const q = query.toUpperCase();
+
+  // Search across multiple relevant columns
+  const results = inventoryData.filter(row => {
+    for (const key of allHeaders) {
+      const val = String(row[key] || '').toUpperCase();
+      if (val.includes(q)) return true;
+    }
+    return false;
+  });
+
+  // Also search by MPN specifically for better matching
+  const mpnResults = inventoryData.filter(row => {
+    const mpn = String(row['MPN'] || '').toUpperCase();
+    const fnumber = String(row['物料'] || '').toUpperCase();
+    return mpn.includes(q) || fnumber.includes(q);
+  });
+
+  // Use MPN-priority results, fallback to general
+  const finalResults = mpnResults.length > 0 ? mpnResults : results;
+
+  // Sort by available qty descending
+  finalResults.sort((a, b) => {
+    const qtyA = parseFloat(a['非限制']) || 0;
+    const qtyB = parseFloat(b['非限制']) || 0;
+    return qtyB - qtyA;
+  });
+
+  document.getElementById('resultCount').textContent = finalResults.length.toLocaleString();
+
+  if (finalResults.length === 0) {
+    showResult('<div class="no-result"><div class="icon">😕</div>未找到匹配 "' + query + '" 的库存<br><span style="font-size:12px;color:#aaa;">试试其他关键词或缩写</span></div>');
+    return;
+  }
+
+  // Build table
+  const displayHeaders = ['MPN', '物料', '物料号', '非限制', '香港库至保税仓在运库存', '质量检查中', '已冻结', 'DATECODE', '产地', '工厂', '库位', '调单客户', '采购订单'];
+  const actualHeaders = displayHeaders.filter(h => allHeaders.includes(h) || h === 'MPN');
+
+  let html = '<div class="result-count">找到 <b>' + finalResults.length.toLocaleString() + '</b> 条库存记录</div>';
+  html += '<div class="result-table-wrap"><table class="result-table"><thead><tr><th>#</th>';
+
+  for (const h of actualHeaders) {
+    html += '<th>' + h + '</th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  finalResults.slice(0, 500).forEach((row, idx) => {
+    const qty = parseFloat(row['非限制']) || 0;
+    let qtyClass = 'qty-none';
+    if (qty > 10000) qtyClass = 'qty-high';
+    else if (qty > 1000) qtyClass = 'qty-low';
+
+    html += '<tr><td>' + (idx + 1) + '</td>';
+    for (const h of actualHeaders) {
+      let val = row[h] !== undefined ? row[h] : '';
+      if (h === 'MPN') {
+        val = row['物料'] || row['MPN'] || '';
+      }
+      if (h === '非限制') {
+        html += '<td class="qty ' + qtyClass + '">' + (val !== '' ? Number(val).toLocaleString() : '0') + '</td>';
+      } else {
+        html += '<td>' + val + '</td>';
+      }
+    }
+    html += '</tr>';
+  });
+
+  if (finalResults.length > 500) {
+    html += '<tr><td colspan="' + (actualHeaders.length + 1) + '" style="text-align:center;color:#999;padding:12px;">仅显示前500条，请使用更精确的搜索条件</td></tr>';
+  }
+
+  html += '</tbody></table></div>';
+  showResult(html);
+}
+
+function showResult(html) {
+  document.getElementById('resultsArea').innerHTML = html;
+}
+
+function searchExample(mpn) {
+  document.getElementById('searchInput').value = mpn;
+  searchInventory();
+}
+
+function downloadExcel() {
+  if (inventoryData.length === 0) {
+    alert('请先上传库存文件');
+    return;
+  }
+
+  const ws = XLSX.utils.json_to_sheet(inventoryData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '库存');
+  XLSX.writeFile(wb, '库存数据_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
+// Check if localStorage has cached data
+try {
+  const cached = localStorage.getItem('lastUploadInfo');
+  if (cached) {
+    const info = JSON.parse(cached);
+    document.getElementById('fileInfo').textContent = '上次更新：' + info.time + ' | ' + info.fileName;
+  }
+} catch(e) {}
+</script>
+</body>
+</html>
